@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tozcevir"
+version = "1.0.0"
+description = "Toz-Cevir-1: a 74M-parameter English-Turkish translation model trained from scratch"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = ["torch>=2.1", "sentencepiece", "huggingface_hub"]
+
+[project.optional-dependencies]
+safetensors = ["safetensors"]
+eval = ["sacrebleu", "pandas", "transformers", "sacremoses", "numpy"]
+
+[project.scripts]
+tozcevir = "tozcevir.__main__:main"
+
+[tool.setuptools]
+packages = ["tozcevir"]
