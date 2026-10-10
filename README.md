@@ -126,15 +126,60 @@ Code and weights are released under Apache-2.0 (see `LICENSE`). The training dat
 
 ## Türkçe
 
-**Töz-Çevir-1**, sıfırdan eğitilmiş küçük bir İngilizce ↔ Türkçe çeviri modeli: 74M parametre, iki yön için tek model, Apache-2.0. Kaggle'ın ücretsiz 2×T4 GPU'larında, ticari olmayan (NC) veri kullanmadan ve başka bir çeviri modelinden damıtma yapmadan eğitildi.
+**Töz-Çevir-1**, [Töz AI](https://huggingface.co/TozAI)'nin sıfırdan eğittiği küçük bir İngilizce ↔ Türkçe çeviri modeli: 74M parametre, iki yön için tek model, Apache-2.0. Sıradan bir bilgisayarda, GPU olmadan da çalışır. Kaggle'ın ücretsiz 2×T4 GPU'larında, ticari olmayan (NC) veri kullanmadan ve başka bir çeviri modelinden damıtma yapmadan eğitildi. Kardeşi [Töz-1](https://huggingface.co/TozAI/Toz-1) Türkçe dil modeli.
 
-FLORES-200 en→tr'de chrF++ 60,0 ile yaklaşık üç kat büyük OPUS-MT tc-big'in (59,2) önünde. WMT24++'ta da önde (53,1 / 50,8). NTREX'te biraz geride (48,3 / 48,8). tr→en'de tc-big'in yaklaşık 3 puan altında (59,1 / 62,1). Benzer boydaki OPUS-MT base'i her sette geçiyor. Sayılar her setten 500 cümleyle ölçüldü; tam setlerde küçük farklar oynayabilir.
+### Nasıl kullanılır
 
-Kullanım (Python 3.9+, GPU gerekmez; ağırlıklar ilk çalıştırmada ~300 MB iner):
+Python 3.9 veya üstü gerekir. PyTorch'u pip kendisi kurar, GPU şart değil. Ağırlıklar (~300 MB) ilk çalıştırmada kendiliğinden iner.
 
 ```bash
 pip install git+https://github.com/Toz-AI/toz-cevir.git
-python -m tozcevir --to en "Yarın okula gideceğim ama İstanbul'u çok özledim."    # kaynak dili söylemene gerek yok, yalnız hedef
+python -m tozcevir --to en "Yarın okula gideceğim ama İstanbul'u çok özledim."
+python -m tozcevir --to tr          # etkileşimli mod; :tr / :en yönü değiştirir, :q çıkış
 ```
 
-Bilinen eksikler: cümle düzeyinde çalışır (belge bağlamı yok), deyimleri çoğu zaman kelimesi kelimesine çevirir, bir-üç kelimelik çok kısa girdilerde çıktıyı bazen tekrarlar ("Seni seviyorum. Seni seviyorum."), eğitim metni ağırlıkla web ve altyazı olduğundan resmî, hukuki, tıbbi metinlerde mutlaka kontrol edilmeli. Bu depoda yalnızca çıkarım ve ölçüm kodu var; eğitim kodu yayınlanmadı.
+```python
+import tozcevir
+
+t = tozcevir.load()
+print(t.translate("Merkez Bankası, enflasyonla mücadele için faizi yarım puan artırdı.", to="en"))
+```
+
+Kaynak dili söylemene gerek yok, yalnız hedefi verirsin (`to="tr"` ya da `to="en"`). Uzun metinleri cümlelere bölüp tek tek çevirir, çünkü model cümle çiftleriyle eğitildi. Bu bir `transformers` modeli değil; `AutoModel.from_pretrained` ile yüklenmez, HF sayfasındaki deneme kutusu da yok. Yukarıdaki küçük paketi kullan.
+
+### Nasıl çalışıyor
+
+Modele bir cümle verirsin ve hangi dile çevireceğini söylersin. Bu seçim, cümlenin başına konan küçük bir etiketle modele iletilir. Encoder cümlenin tamamını okur, decoder çeviriyi sözcük sözcük (ya da sözcük parçası parçası) yazar ve her adımda hem şimdiye kadar yazdığına hem de encoder'ın anladığına bakar. Çıktıda dört en iyi adayı tutan bir beam search kullanılır. Eğitimde her cümle çifti rastgele bir yönde gösterildiği için aynı ağırlıklar iki yönü de yapar.
+
+### Örnekler
+
+Gerçek çıktılar, beam 4, hiçbiri elle düzeltilmedi:
+
+| Yön | Girdi | Çıktı |
+|---|---|---|
+| en→tr | I'll call you when I get home, and then we can decide where to eat. | Eve geldiğimde seni ararım, sonra da nerede yiyeceğimize karar veririz. |
+| tr→en | Sınav haftası yaklaştığı için kütüphane sabahtan akşama kadar doluydu. | The library was full from morning to evening as the exam week was approaching. |
+| en→tr | It's raining cats and dogs. | Kedi ve köpekler yağmur yağıyor. |
+| tr→en | Ağzından bal damlıyor. | She's dripping honey in her mouth. |
+
+Son iki satır deyim hatası: model deyimleri çoğu zaman kelimesi kelimesine çevirir.
+
+### Sonuçlar
+
+FLORES-200 en→tr'de chrF++ 60,0 ile yaklaşık üç kat büyük OPUS-MT tc-big'in (59,2) önünde. WMT24++'ta da önde (53,1 / 50,8). NTREX'te biraz geride (48,3 / 48,8). tr→en'de tc-big'in yaklaşık 3 puan altında (59,1 / 62,1). Benzer boydaki OPUS-MT base'i her sette geçiyor. Sayılar her setten 500 cümleyle ölçüldü; tam setlerde birkaç onda bir puanlık farklar oynayabilir. Tablo yukarıda, İngilizce bölümde.
+
+### Eğitim
+
+Yaklaşık 170 milyon ham cümle çiftinden (OPUS ve HPLT) filtrelemeyle 95 milyonu seçildi. Yaklaşık 6 milyar token üzerinde, 120 bin adım, iki T4'te kabaca 40 saat sürdü. Ticari olmayan lisanslı veriler (TED, QED, Tanzil) bilerek kullanılmadı. Eğitim kodu yayınlanmadı; bu depoda yalnızca çıkarım ve ölçüm kodu var.
+
+### Bilinen eksikler
+
+- **Çok kısa girdiler.** Bir ile üç kelimelik girdilerde (selamlaşma, tek kelime) model sık sık çıktıyı iki kere yazar ya da başa dolgu ekler: "Hello!" → "Merhaba! Merhaba!", "I love you." → "Seni seviyorum. Seni seviyorum.", "Merhaba." → "Oh, hi. Hi." Uzun cümlelerde bu olmaz. Büyük ihtimalle eğitimdeki altyazı satırlarından öğrendiği bir alışkanlık; nedenini kesin doğrulamadık. Kısa bir ifadeyi çevireceksen onu bir cümlenin içinde ver ya da çıktıyı kontrol et.
+- **Deyimler** kelimesi kelimesine çevrilir.
+- **Cümle düzeyinde çalışır**, belge bağlamı yok: zamirler, hitap biçimi ve terimler cümleden cümleye kayabilir.
+- Eğitim metni ağırlıkla web ve altyazı olduğundan **resmî, hukuki, tıbbi ve çok teknik metinlerde** çıktı mutlaka bir insan tarafından kontrol edilmeli. İsimler ve sayılar da yanlış çıkabilir.
+- 254 tokenden uzun girdiler kesilir.
+
+### Lisans
+
+Kod ve ağırlıklar Apache-2.0. Eğitim verisi birçok kaynaktan geliyor ve her birinin kendi lisansı var; ayrıntı için OPUS ve HPLT sayfalarına bakın.
