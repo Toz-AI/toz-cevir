@@ -1,8 +1,51 @@
 # Töz-Çevir-1
 
-**Töz-Çevir-1** is [Töz AI](https://huggingface.co/TozAI)'s English ↔ Turkish translation model, trained from scratch. 74.1M parameters, one model for both directions, Apache-2.0. It is the sibling of [Töz-1](https://huggingface.co/TozAI/Toz-1).
+**Töz-Çevir-1** is [Töz AI](https://huggingface.co/TozAI)'s English ↔ Turkish translation model, trained from scratch. 74.1M parameters, one model for both directions, Apache-2.0, runs on an ordinary laptop. It is the sibling of [Töz-1](https://huggingface.co/TozAI/Toz-1).
 
 It was trained by one person on Kaggle's free 2×T4 GPUs, without any non-commercial data and without distilling from another translation model. On the benchmarks below it is ahead of the similarly sized OPUS-MT base model everywhere, and on English→Turkish it is level with OPUS-MT tc-big, which has about three times as many parameters. Turkish→English is where it still falls short.
+
+## Try it
+
+You need Python 3.9 or newer. PyTorch is installed by pip; a GPU is optional. The weights (~300 MB) are downloaded on first use.
+
+```bash
+pip install git+https://github.com/Toz-AI/toz-cevir.git
+python -m tozcevir --to tr "Could you please send me the report by Friday?"
+python -m tozcevir --to en            # interactive; :tr / :en switch direction, :q quits
+```
+
+From Python:
+
+```python
+import tozcevir
+
+t = tozcevir.load()          # downloads toz-cevir.pt and tokenizer.model from the Hub
+print(t.translate("The weather is lovely today, so we decided to walk to the park.", to="tr"))
+print(t.translate("Bugün hava çok güzel, bu yüzden parka yürüyerek gitmeye karar verdik.", to="en"))
+```
+
+You never tell the model the source language, only the target (`to="tr"` or `to="en"`). Longer text is split into sentences and translated one by one, because the model was trained on sentence pairs. It uses the GPU if there is one and runs on CPU otherwise; beam search is not batched, so expect roughly 0.2 s per sentence on an RTX 3060 Ti. Local files work too: `tozcevir.load("path/to/folder")`, where the folder has `toz-cevir.pt` and `tokenizer.model`.
+
+This is not a `transformers` model, so `AutoModel.from_pretrained` will not load it and the Hub's inference widget is not available. Use the small package above.
+
+## Examples
+
+Real outputs, beam size 4, nothing edited. The last two rows show a known weakness.
+
+| | Input | Output |
+|---|---|---|
+| en→tr | The central bank raised interest rates by half a point to fight inflation. | Merkez bankası enflasyonla mücadele etmek için faiz oranlarını yarım puan artırdı. |
+| en→tr | I'll call you when I get home, and then we can decide where to eat. | Eve geldiğimde seni ararım, sonra da nerede yiyeceğimize karar veririz. |
+| tr→en | Merkez Bankası, enflasyonla mücadele için faizi yarım puan artırdı. | The Central Bank raised interest rates by half a point to combat inflation. |
+| tr→en | Sınav haftası yaklaştığı için kütüphane sabahtan akşama kadar doluydu. | The library was full from morning to evening as the exam week was approaching. |
+| en→tr | It's raining cats and dogs. | Kedi ve köpekler yağmur yağıyor. |
+| tr→en | Ağzından bal damlıyor. | She's dripping honey in her mouth. |
+
+Idioms come out word for word, and one-word greetings are shaky too (see Limitations).
+
+## How it works
+
+You give the model a sentence and say which language you want. Inside, that choice is a small tag placed in front of the sentence. The encoder reads the whole sentence at once. The decoder then writes the translation one piece at a time (a word or part of a word), each time looking at what it has written so far and at what the encoder understood. Beam search keeps the four best partial translations at every step and returns the best finished one. The same weights handle both directions; during training every sentence pair was shown in a random direction.
 
 ## Results
 
@@ -30,31 +73,6 @@ How to read this:
 | **v1.0.0** | October 2026 | first release: 120k training steps, scores above |
 
 Older versions stay downloadable with `tozcevir.load(revision="v1.0.0")` (a Hub tag).
-
-## Quick start
-
-```bash
-pip install git+https://github.com/Toz-AI/toz-cevir.git
-```
-
-```python
-import tozcevir
-
-t = tozcevir.load()          # downloads toz-cevir.pt (~300 MB) and tokenizer.model from the Hub
-print(t.translate("The weather is lovely today, so we decided to walk to the park.", to="tr"))
-print(t.translate("Bugün hava çok güzel, bu yüzden parka yürüyerek gitmeye karar verdik.", to="en"))
-```
-
-You never tell the model the source language, only the target (`to="tr"` or `to="en"`). Longer text is split into sentences and translated one by one, because the model was trained on sentence pairs.
-
-Command line:
-
-```bash
-python -m tozcevir --to tr "Could you please send me the report by Friday?"
-python -m tozcevir --to en            # interactive; :tr / :en switch direction, :q quits
-```
-
-It uses the GPU if there is one and runs on CPU otherwise. Beam search is not batched, so on an RTX 3060 Ti it takes roughly 0.2 s per sentence. Local files work too: `tozcevir.load("path/to/folder")` where the folder has `toz-cevir.pt` and `tokenizer.model`.
 
 ## Model
 
@@ -112,7 +130,7 @@ Code and weights are released under Apache-2.0 (see `LICENSE`). The training dat
 
 FLORES-200 en→tr'de chrF++ 60,0 ile yaklaşık üç kat büyük OPUS-MT tc-big'in (59,2) önünde. WMT24++'ta da önde (53,1 / 50,8). NTREX'te biraz geride (48,3 / 48,8). tr→en'de tc-big'in yaklaşık 3 puan altında (59,1 / 62,1). Benzer boydaki OPUS-MT base'i her sette geçiyor. Sayılar her setten 500 cümleyle ölçüldü; tam setlerde küçük farklar oynayabilir.
 
-Kullanım:
+Kullanım (Python 3.9+, GPU gerekmez; ağırlıklar ilk çalıştırmada ~300 MB iner):
 
 ```bash
 pip install git+https://github.com/Toz-AI/toz-cevir.git
